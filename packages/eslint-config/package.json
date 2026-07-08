@@ -1,0 +1,12 @@
+{
+  "name": "@aegis/eslint-config",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "eslint": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0"
+  }
+}

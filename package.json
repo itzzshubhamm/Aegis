@@ -1,0 +1,31 @@
+{
+  "name": "aegis-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aegis Adaptive Cyber Defense Platform",
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json,yaml}\"",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "docker:up": "docker-compose -f infrastructure/compose/docker-compose.yml up -d",
+    "docker:down": "docker-compose -f infrastructure/compose/docker-compose.yml down",
+    "docker:logs": "docker-compose -f infrastructure/compose/docker-compose.yml logs -f",
+    "docker:reset": "docker-compose -f infrastructure/compose/docker-compose.yml down -v && pnpm run docker:up",
+    "db:migrate": "turbo run db:migrate",
+    "db:generate": "turbo run db:generate",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "prettier": "^3.0.0",
+    "turbo": "^1.13.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0"
+}

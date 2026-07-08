@@ -1,0 +1,15 @@
+{
+  "name": "@aegis/common",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w"
+  },
+  "devDependencies": {
+    "@aegis/tsconfig": "workspace:*",
+    "typescript": "^5.0.0"
+  }
+}
