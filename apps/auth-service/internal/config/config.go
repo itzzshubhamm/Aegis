@@ -6,10 +6,12 @@ import (
 )
 
 type Config struct {
-	Port        int
-	Env         string
-	DatabaseURL string
-	RedisURL    string
+	Port         int
+	Env          string
+	DatabaseURL  string
+	RedisURL     string
+	KafkaBrokers string
+	JWTSecret    string
 }
 
 // LoadConfig parses environment variables and returns a Config struct
@@ -21,15 +23,17 @@ func LoadConfig() *Config {
 	}
 
 	return &Config{
-		Port:        port,
-		Env:         getEnv("NODE_ENV", "development"),
-		DatabaseURL: getEnv("DATABASE_URL", ""),
-		RedisURL:    getEnv("REDIS_URL", ""),
+		Port:         port,
+		Env:          getEnv("NODE_ENV", "development"),
+		DatabaseURL:  getEnv("DATABASE_URL", "postgres://aegis_admin:admin123@localhost:5432/aegis_db?sslmode=disable"),
+		RedisURL:     getEnv("REDIS_URL", "localhost:6379"),
+		KafkaBrokers: getEnv("KAFKA_BROKERS", "localhost:9092"),
+		JWTSecret:    getEnv("JWT_SECRET", "aegis-super-secret-jwt-key-change-in-prod"),
 	}
 }
 
 func getEnv(key, fallback string) string {
-	if value, exists := os.LookupEnv(key); exists {
+	if value, exists := os.LookupEnv(key); exists && value != "" {
 		return value
 	}
 	return fallback

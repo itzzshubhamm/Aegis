@@ -4,73 +4,67 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-const CorrelationIDHeader = "x-correlation-id"
+const CorrelationIDHeader = "X-Correlation-ID"
 
-// CorrelationID is a middleware that handles x-correlation-id header
-func CorrelationID() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		id := c.Get(CorrelationIDHeader)
+// CorrelationID injects or preserves X-Correlation-ID header in gin.Context
+func CorrelationID() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.GetHeader(CorrelationIDHeader)
 		if id == "" {
 			id = uuid.New().String()
 		}
-		
-		c.Set(CorrelationIDHeader, id)
-		c.Locals("correlationId", id)
-		
-		err := c.Next()
-		
-		c.Response().Header.Set(CorrelationIDHeader, id)
-		return err
+
+		c.Set("correlationId", id)
+		c.Header(CorrelationIDHeader, id)
+
+		c.Next()
 	}
 }
 
-// Logger is a structured logging middleware using slog
-func Logger() fiber.Handler {
-	return func(c *fiber.Ctx) error {
+// Logger provides slog structured request logging
+func Logger() gin.HandlerFunc {
+	return func(c *gin.Context) {
 		startTime := time.Now()
-		
-		err := c.Next()
-		
+		path := c.Request.URL.Path
+		raw := c.Request.URL.RawQuery
+
+		c.Next()
+
 		duration := time.Since(startTime)
-		correlationID, _ := c.Locals("correlationId").(string)
-		
+		correlationID, _ := c.Get("correlationId")
+
+		if raw != "" {
+			path = path + "?" + raw
+		}
+
 		slog.Info("Request completed",
 			"correlationId", correlationID,
-			"method", c.Method(),
-			"url", c.OriginalURL(),
-			"statusCode", c.Response().StatusCode(),
+			"method", c.Request.Method,
+			"path", path,
+			"statusCode", c.Writer.Status(),
 			"duration", duration.String(),
+			"clientIp", c.ClientIP(),
 		)
-		
-		return err
 	}
 }
 
-// Recovery handles panics and returns structured JSON responses
-func Recovery() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		defer func() {
-			if r := recover(); r != nil {
-				correlationID, _ := c.Locals("correlationId").(string)
-				slog.Error("Recovery caught panic",
-					"correlationId", correlationID,
-					"path", c.OriginalURL(),
-					"error", r,
-				)
-				
-				c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"statusCode":    fiber.StatusInternalServerError,
-					"timestamp":     time.Now().Format(time.RFC3339),
-					"path":          c.OriginalURL(),
-					"correlationId": correlationID,
-					"message":       "Internal server error",
-				})
-			}
-		}()
-		return c.Next()
+// CORS provides standard cross-origin resource sharing middleware
+func CORS() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Correlation-ID, X-Tenant-ID")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
 	}
 }
