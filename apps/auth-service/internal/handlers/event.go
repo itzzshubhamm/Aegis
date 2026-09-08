@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"auth-service/internal/db"
@@ -31,6 +32,7 @@ type IngestEventRequest struct {
 	EventType string         `json:"event_type" binding:"required"`
 	Source    string         `json:"source" binding:"required"`
 	SourceIP  string         `json:"source_ip" binding:"required"`
+	UserID    string         `json:"user_id"`
 	Resource  string         `json:"resource"`
 	Asset     string         `json:"asset"` // alias for resource
 	Action    string         `json:"action"`
@@ -89,7 +91,7 @@ func (h *EventHandler) IngestEvent(c *gin.Context) {
 		EventType: req.EventType,
 		Source:    req.Source,
 		SourceIp:  req.SourceIP,
-		UserID:    "",
+		UserID:    req.UserID,
 		Resource:  resource,
 		Action:    req.Action,
 		Severity:  severity,
@@ -131,4 +133,81 @@ func (h *EventHandler) IngestEvent(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, event)
+}
+
+func (h *EventHandler) ListEvents(c *gin.Context) {
+	tenantID, ok := middleware.GetTenantID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Tenant identity not resolved"})
+		return
+	}
+
+	if h == nil || h.store == nil {
+		c.JSON(http.StatusOK, []db.SecurityEvent{})
+		return
+	}
+
+	limitStr := c.DefaultQuery("limit", "50")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 50
+	}
+
+	offsetStr := c.DefaultQuery("offset", "0")
+	pageStr := c.Query("page")
+	offset := 0
+	if pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			offset = (page - 1) * limit
+		}
+	} else if off, err := strconv.Atoi(offsetStr); err == nil && off >= 0 {
+		offset = off
+	}
+
+	events, err := h.store.ListSecurityEventsFiltered(c.Request.Context(), db.ListSecurityEventsFilteredParams{
+		TenantID: tenantID,
+		Limit:    int32(limit),
+		Offset:   int32(offset),
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list security events: " + err.Error()})
+		return
+	}
+
+	if events == nil {
+		events = []db.SecurityEvent{}
+	}
+
+	c.JSON(http.StatusOK, events)
+}
+
+func (h *EventHandler) GetEventByID(c *gin.Context) {
+	tenantID, ok := middleware.GetTenantID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Tenant identity not resolved"})
+		return
+	}
+
+	if h == nil || h.store == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Store unavailable"})
+		return
+	}
+
+	idStr := c.Param("id")
+	eventID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid event ID format"})
+		return
+	}
+
+	event, err := h.store.GetSecurityEventByID(c.Request.Context(), db.GetSecurityEventByIDParams{
+		ID:       eventID,
+		TenantID: tenantID,
+	})
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Security event not found or access denied"})
+		return
+	}
+
+	c.JSON(http.StatusOK, event)
 }

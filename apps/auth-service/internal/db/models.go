@@ -13,16 +13,17 @@ import (
 )
 
 type Alert struct {
-	ID            uuid.UUID `json:"id"`
-	TenantID      uuid.UUID `json:"tenant_id"`
-	Severity      string    `json:"severity"`
-	DetectionType string    `json:"detection_type"`
-	SourceIp      string    `json:"source_ip"`
-	AffectedAsset string    `json:"affected_asset"`
-	Description   string    `json:"description"`
-	Status        string    `json:"status"`
-	Timestamp     time.Time `json:"timestamp"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            uuid.UUID       `json:"id"`
+	TenantID      uuid.UUID       `json:"tenant_id"`
+	Severity      string          `json:"severity"`
+	DetectionType string          `json:"detection_type"`
+	SourceIp      string          `json:"source_ip"`
+	AffectedAsset string          `json:"affected_asset"`
+	Description   string          `json:"description"`
+	Status        string          `json:"status"`
+	Timestamp     time.Time       `json:"timestamp"`
+	CreatedAt     time.Time       `json:"created_at"`
+	Metadata      json.RawMessage `json:"metadata"`
 }
 
 type Honeytoken struct {
