@@ -25,17 +25,22 @@ type Querier interface {
 	CreateTenant(ctx context.Context, name string) (Tenant, error)
 	// Users
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	GetAlertByID(ctx context.Context, arg GetAlertByIDParams) (Alert, error)
+	GetHoneytokenByID(ctx context.Context, arg GetHoneytokenByIDParams) (Honeytoken, error)
 	GetHoneytokenByValue(ctx context.Context, tokenValue string) (Honeytoken, error)
 	GetSecurityEventByID(ctx context.Context, arg GetSecurityEventByIDParams) (SecurityEvent, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	ListAlertsFiltered(ctx context.Context, arg ListAlertsFilteredParams) ([]Alert, error)
 	ListHoneytokens(ctx context.Context, tenantID uuid.UUID) ([]Honeytoken, error)
 	ListRecentAlerts(ctx context.Context, arg ListRecentAlertsParams) ([]Alert, error)
 	ListRecentSecurityEvents(ctx context.Context, arg ListRecentSecurityEventsParams) ([]SecurityEvent, error)
+	ListSecurityEventsFiltered(ctx context.Context, arg ListSecurityEventsFilteredParams) ([]SecurityEvent, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
 	UpdateAlertStatus(ctx context.Context, arg UpdateAlertStatusParams) (Alert, error)
 	UpdateHoneytokenStatus(ctx context.Context, arg UpdateHoneytokenStatusParams) (Honeytoken, error)
+	UpdateHoneytokenStatusByTokenID(ctx context.Context, arg UpdateHoneytokenStatusByTokenIDParams) (Honeytoken, error)
 }
 
 var _ Querier = (*Queries)(nil)

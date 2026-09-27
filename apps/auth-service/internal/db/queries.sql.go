@@ -100,25 +100,28 @@ func (q *Queries) CountSecurityEvents(ctx context.Context, tenantID uuid.UUID) (
 }
 
 const createAlert = `-- name: CreateAlert :one
-INSERT INTO alerts (tenant_id, severity, detection_type, source_ip, affected_asset, description, status, timestamp)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, tenant_id, severity, detection_type, source_ip, affected_asset, description, status, timestamp, created_at
+INSERT INTO alerts (id, tenant_id, severity, detection_type, source_ip, affected_asset, description, status, metadata, timestamp)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, tenant_id, severity, detection_type, source_ip, affected_asset, description, status, timestamp, created_at, metadata
 `
 
 type CreateAlertParams struct {
-	TenantID      uuid.UUID `json:"tenant_id"`
-	Severity      string    `json:"severity"`
-	DetectionType string    `json:"detection_type"`
-	SourceIp      string    `json:"source_ip"`
-	AffectedAsset string    `json:"affected_asset"`
-	Description   string    `json:"description"`
-	Status        string    `json:"status"`
-	Timestamp     time.Time `json:"timestamp"`
+	ID            uuid.UUID       `json:"id"`
+	TenantID      uuid.UUID       `json:"tenant_id"`
+	Severity      string          `json:"severity"`
+	DetectionType string          `json:"detection_type"`
+	SourceIp      string          `json:"source_ip"`
+	AffectedAsset string          `json:"affected_asset"`
+	Description   string          `json:"description"`
+	Status        string          `json:"status"`
+	Metadata      json.RawMessage `json:"metadata"`
+	Timestamp     time.Time       `json:"timestamp"`
 }
 
 // Alerts
 func (q *Queries) CreateAlert(ctx context.Context, arg CreateAlertParams) (Alert, error) {
 	row := q.db.QueryRowContext(ctx, createAlert,
+		arg.ID,
 		arg.TenantID,
 		arg.Severity,
 		arg.DetectionType,
@@ -126,6 +129,7 @@ func (q *Queries) CreateAlert(ctx context.Context, arg CreateAlertParams) (Alert
 		arg.AffectedAsset,
 		arg.Description,
 		arg.Status,
+		arg.Metadata,
 		arg.Timestamp,
 	)
 	var i Alert
@@ -140,17 +144,19 @@ func (q *Queries) CreateAlert(ctx context.Context, arg CreateAlertParams) (Alert
 		&i.Status,
 		&i.Timestamp,
 		&i.CreatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
 
 const createHoneytoken = `-- name: CreateHoneytoken :one
-INSERT INTO honeytokens (tenant_id, name, type, token_value, status)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO honeytokens (id, tenant_id, name, type, token_value, status)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, tenant_id, name, type, token_value, status, last_triggered_at, created_at
 `
 
 type CreateHoneytokenParams struct {
+	ID         uuid.UUID `json:"id"`
 	TenantID   uuid.UUID `json:"tenant_id"`
 	Name       string    `json:"name"`
 	Type       string    `json:"type"`
@@ -161,6 +167,7 @@ type CreateHoneytokenParams struct {
 // Honeytokens
 func (q *Queries) CreateHoneytoken(ctx context.Context, arg CreateHoneytokenParams) (Honeytoken, error) {
 	row := q.db.QueryRowContext(ctx, createHoneytoken,
+		arg.ID,
 		arg.TenantID,
 		arg.Name,
 		arg.Type,
@@ -284,6 +291,61 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const getAlertByID = `-- name: GetAlertByID :one
+SELECT id, tenant_id, severity, detection_type, source_ip, affected_asset, description, status, timestamp, created_at, metadata FROM alerts
+WHERE id = $1 AND tenant_id = $2
+`
+
+type GetAlertByIDParams struct {
+	ID       uuid.UUID `json:"id"`
+	TenantID uuid.UUID `json:"tenant_id"`
+}
+
+func (q *Queries) GetAlertByID(ctx context.Context, arg GetAlertByIDParams) (Alert, error) {
+	row := q.db.QueryRowContext(ctx, getAlertByID, arg.ID, arg.TenantID)
+	var i Alert
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Severity,
+		&i.DetectionType,
+		&i.SourceIp,
+		&i.AffectedAsset,
+		&i.Description,
+		&i.Status,
+		&i.Timestamp,
+		&i.CreatedAt,
+		&i.Metadata,
+	)
+	return i, err
+}
+
+const getHoneytokenByID = `-- name: GetHoneytokenByID :one
+SELECT id, tenant_id, name, type, token_value, status, last_triggered_at, created_at FROM honeytokens
+WHERE id = $1 AND tenant_id = $2
+`
+
+type GetHoneytokenByIDParams struct {
+	ID       uuid.UUID `json:"id"`
+	TenantID uuid.UUID `json:"tenant_id"`
+}
+
+func (q *Queries) GetHoneytokenByID(ctx context.Context, arg GetHoneytokenByIDParams) (Honeytoken, error) {
+	row := q.db.QueryRowContext(ctx, getHoneytokenByID, arg.ID, arg.TenantID)
+	var i Honeytoken
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Name,
+		&i.Type,
+		&i.TokenValue,
+		&i.Status,
+		&i.LastTriggeredAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getHoneytokenByValue = `-- name: GetHoneytokenByValue :one
 SELECT id, tenant_id, name, type, token_value, status, last_triggered_at, created_at FROM honeytokens
 WHERE token_value = $1
@@ -386,6 +448,67 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 	return i, err
 }
 
+const listAlertsFiltered = `-- name: ListAlertsFiltered :many
+SELECT id, tenant_id, severity, detection_type, source_ip, affected_asset, description, status, timestamp, created_at, metadata FROM alerts
+WHERE tenant_id = $1
+  AND ($4::text IS NULL OR severity = $4)
+  AND ($5::text IS NULL OR status = $5)
+  AND ($6::text IS NULL OR detection_type = $6)
+ORDER BY timestamp DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListAlertsFilteredParams struct {
+	TenantID      uuid.UUID      `json:"tenant_id"`
+	Limit         int32          `json:"limit"`
+	Offset        int32          `json:"offset"`
+	Severity      sql.NullString `json:"severity"`
+	Status        sql.NullString `json:"status"`
+	DetectionType sql.NullString `json:"detection_type"`
+}
+
+func (q *Queries) ListAlertsFiltered(ctx context.Context, arg ListAlertsFilteredParams) ([]Alert, error) {
+	rows, err := q.db.QueryContext(ctx, listAlertsFiltered,
+		arg.TenantID,
+		arg.Limit,
+		arg.Offset,
+		arg.Severity,
+		arg.Status,
+		arg.DetectionType,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Alert
+	for rows.Next() {
+		var i Alert
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Severity,
+			&i.DetectionType,
+			&i.SourceIp,
+			&i.AffectedAsset,
+			&i.Description,
+			&i.Status,
+			&i.Timestamp,
+			&i.CreatedAt,
+			&i.Metadata,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listHoneytokens = `-- name: ListHoneytokens :many
 SELECT id, tenant_id, name, type, token_value, status, last_triggered_at, created_at FROM honeytokens
 WHERE tenant_id = $1
@@ -425,7 +548,7 @@ func (q *Queries) ListHoneytokens(ctx context.Context, tenantID uuid.UUID) ([]Ho
 }
 
 const listRecentAlerts = `-- name: ListRecentAlerts :many
-SELECT id, tenant_id, severity, detection_type, source_ip, affected_asset, description, status, timestamp, created_at FROM alerts
+SELECT id, tenant_id, severity, detection_type, source_ip, affected_asset, description, status, timestamp, created_at, metadata FROM alerts
 WHERE tenant_id = $1
 ORDER BY created_at DESC
 LIMIT $2
@@ -456,6 +579,7 @@ func (q *Queries) ListRecentAlerts(ctx context.Context, arg ListRecentAlertsPara
 			&i.Status,
 			&i.Timestamp,
 			&i.CreatedAt,
+			&i.Metadata,
 		); err != nil {
 			return nil, err
 		}
@@ -484,6 +608,56 @@ type ListRecentSecurityEventsParams struct {
 
 func (q *Queries) ListRecentSecurityEvents(ctx context.Context, arg ListRecentSecurityEventsParams) ([]SecurityEvent, error) {
 	rows, err := q.db.QueryContext(ctx, listRecentSecurityEvents, arg.TenantID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SecurityEvent
+	for rows.Next() {
+		var i SecurityEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.EventType,
+			&i.Source,
+			&i.SourceIp,
+			&i.UserID,
+			&i.Resource,
+			&i.Action,
+			&i.Severity,
+			&i.Status,
+			&i.Metadata,
+			&i.Timestamp,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSecurityEventsFiltered = `-- name: ListSecurityEventsFiltered :many
+SELECT id, tenant_id, event_type, source, source_ip, user_id, resource, action, severity, status, metadata, timestamp, created_at FROM security_events
+WHERE tenant_id = $1
+ORDER BY timestamp DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListSecurityEventsFilteredParams struct {
+	TenantID uuid.UUID `json:"tenant_id"`
+	Limit    int32     `json:"limit"`
+	Offset   int32     `json:"offset"`
+}
+
+func (q *Queries) ListSecurityEventsFiltered(ctx context.Context, arg ListSecurityEventsFilteredParams) ([]SecurityEvent, error) {
+	rows, err := q.db.QueryContext(ctx, listSecurityEventsFiltered, arg.TenantID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -551,7 +725,7 @@ const updateAlertStatus = `-- name: UpdateAlertStatus :one
 UPDATE alerts
 SET status = $2
 WHERE id = $1 AND tenant_id = $3
-RETURNING id, tenant_id, severity, detection_type, source_ip, affected_asset, description, status, timestamp, created_at
+RETURNING id, tenant_id, severity, detection_type, source_ip, affected_asset, description, status, timestamp, created_at, metadata
 `
 
 type UpdateAlertStatusParams struct {
@@ -574,6 +748,7 @@ func (q *Queries) UpdateAlertStatus(ctx context.Context, arg UpdateAlertStatusPa
 		&i.Status,
 		&i.Timestamp,
 		&i.CreatedAt,
+		&i.Metadata,
 	)
 	return i, err
 }
@@ -599,6 +774,35 @@ func (q *Queries) UpdateHoneytokenStatus(ctx context.Context, arg UpdateHoneytok
 		arg.LastTriggeredAt,
 		arg.TenantID,
 	)
+	var i Honeytoken
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Name,
+		&i.Type,
+		&i.TokenValue,
+		&i.Status,
+		&i.LastTriggeredAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateHoneytokenStatusByTokenID = `-- name: UpdateHoneytokenStatusByTokenID :one
+UPDATE honeytokens
+SET status = $2, last_triggered_at = $3
+WHERE id = $1
+RETURNING id, tenant_id, name, type, token_value, status, last_triggered_at, created_at
+`
+
+type UpdateHoneytokenStatusByTokenIDParams struct {
+	ID              uuid.UUID    `json:"id"`
+	Status          string       `json:"status"`
+	LastTriggeredAt sql.NullTime `json:"last_triggered_at"`
+}
+
+func (q *Queries) UpdateHoneytokenStatusByTokenID(ctx context.Context, arg UpdateHoneytokenStatusByTokenIDParams) (Honeytoken, error) {
+	row := q.db.QueryRowContext(ctx, updateHoneytokenStatusByTokenID, arg.ID, arg.Status, arg.LastTriggeredAt)
 	var i Honeytoken
 	err := row.Scan(
 		&i.ID,
